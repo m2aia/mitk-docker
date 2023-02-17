@@ -1,7 +1,7 @@
 mitk-docker
 ===========
 
-This project provides a utilities to run Docker commands from within MITK and Docker based processing views.
+This project provides utilities to run Docker commands from within MITK and Docker based processing views.
 
 Features
 --------
