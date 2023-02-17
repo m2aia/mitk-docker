@@ -15,17 +15,17 @@ Features
 How it works
 ------------
 
-1. Clone [MITK](https://github.com/MITK/MITK) and checkout the latest release tag or at least the stable master branch
-2. Clone [mitk-docker](https://github.com/jtfcordes/mitk-docker)
+1. Clone https://github.com/MITK/MITK and checkout the latest release tag or at least the stable master branch
+2. Clone https://github.com/jtfcordes/mitk-docker
 3. Configure the MITK superbuild and set the CMake cache variable `MITK_EXTENSION_DIRS` to your working copy of the project template
 4. Generate and build the MITK superbuild
 
 Supported platforms and other requirements
 ------------------------------------------
 
-- Only unix systems
-- [Docker][https://www.docker.com/get-started/] installation
-- Access to the 'docker' command
+- Currently only unix systems are supported
+- Docker installation (https://www.docker.com/get-started/)
+- User access to the 'docker' command
 
 License
 -------
