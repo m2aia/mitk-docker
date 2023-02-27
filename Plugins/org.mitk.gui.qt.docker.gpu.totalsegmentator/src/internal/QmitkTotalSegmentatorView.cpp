@@ -26,6 +26,7 @@ found in the LICENSE file.
 
 #include "QmitkTotalSegmentatorView.h"
 #include <mitkDockerHelper.h>
+#include <mitkLabel.h>
 #include <mitkLabelSetImage.h>
 
 // Don't forget to initialize the VIEW_ID.
@@ -59,7 +60,7 @@ void QmitkTotalSegmentatorView::SetFocus() {
 }
 
 void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
-  
+
   using namespace itksys;
   auto selectedDataNode = m_Controls.selectionWidget->GetSelectedNode();
   auto data = selectedDataNode->GetData();
@@ -75,10 +76,11 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
 
   // arguments
   helper.AddApplicationArgument("TotalSegmentator");
-  
-  mitk::DockerHelper::OutputInfo * mlResult = nullptr;
+
+  mitk::DockerHelper::LoadDataInfo *mlResult = nullptr;
   if (m_Controls.cbMultiLabel->isChecked())
-    mlResult = helper.AddLoadLaterOutput("--ml", "results.nii", helper.FLAG_ONLY);
+    mlResult =
+        helper.AddLoadLaterOutput("--ml", "results.nii", helper.FLAG_ONLY);
 
   if (m_Controls.cbFast->isChecked())
     helper.AddApplicationArgument("--fast");
@@ -88,17 +90,17 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
         "--roi_subset", m_Controls.textEdit->toPlainText().toStdString());
 
   // inputs
-  helper.AddData(image, "-i", "input_image.nii.gz");
+  helper.AddAutoSaveData(image, "-i", "input_image.nii.gz");
 
   // output
   helper.AddAutoLoadOutputFolder("-o", "results",
                                  m_TotalSegmentatorResultFileNames);
-  
+
   if (m_Controls.cbStatistics->isChecked())
-    helper.AddLoadLaterOutput("--statistics", "statistics.json");
+    helper.AddLoadLaterOutput("--statistics", "statistics.json", helper.FLAG_ONLY);
 
   if (m_Controls.cbRadiomics->isChecked())
-    helper.AddLoadLaterOutput("--radiomics", "statistics_radiomics.json");
+    helper.AddLoadLaterOutput("--radiomics", "statistics_radiomics.json", helper.FLAG_ONLY);
 
   if (m_Controls.cbPreview->isChecked())
     helper.AddAutoLoadOutput("--preview", "preview.png", helper.FLAG_ONLY);
@@ -107,7 +109,7 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
   std::string filePath;
   for (auto image : results) {
     data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
-  
+
                                                filePath);
     data->GetPropertyList()->RemoveProperty("MITK.IO.reader.inputlocation");
 
@@ -117,15 +119,20 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
     this->GetDataStorage()->Add(node, selectedDataNode);
   }
 
-  if(mlResult){
+  if (mlResult) {
     auto mlPath = helper.GetFilePath(mlResult->path);
     auto results = mitk::IOUtil::Load(mlPath);
     auto lsImage = mitk::LabelSetImage::New();
-    lsImage->InitializeByLabeledImage(dynamic_cast<mitk::Image *>(results[0].GetPointer()));
+    lsImage->InitializeByLabeledImage(
+        dynamic_cast<mitk::Image *>(results[0].GetPointer()));
     auto node = mitk::DataNode::New();
     node->SetData(lsImage);
     node->SetName("TotalSegmentator_multilabel");
+    // auto ls = lsImage->GetActiveLabelSet();
+    // for (unsigned t = 0; t < ls->GetNumberOfLabels(); ++t) {
+    //   lsImage->GetLabel(t)->SetName(SystemTools::GetFilenameWithoutExtension(m_TotalSegmentatorResultFileNames[t]));
+    // }
+
     this->GetDataStorage()->Add(node, selectedDataNode);
   }
-
 }

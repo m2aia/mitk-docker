@@ -27,6 +27,7 @@ See LICENSE.txt for details.
 
 #include <mitkPointSet.h>
 #include <mitkHelperUtils.h>
+#include <boost/filesystem.hpp>
 
 
 namespace mitk
@@ -39,29 +40,31 @@ namespace mitk
   {
 
    public:
-
     const bool AUTOLOAD = true;
+    const bool AUTOSAVE = true;
     const bool DIRECTORY = true;
     const bool FLAG_ONLY = true;
 
     virtual ~DockerHelper(){}
     DockerHelper(std::string image):m_ImageName(image){
-      m_WorkingDirectory = mitk::HelperUtils::TempDirPath();
+      m_WorkingDirectory = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
     }
 
-    struct DataInfo{
-      DataInfo(std::string targetArgument,  std::string nameWithExtension)
-      : targetArgument(targetArgument),nameWithExtension(nameWithExtension)
+    struct SaveDataInfo{
+      SaveDataInfo(std::string nameWithExtension, mitk::BaseData::Pointer data, bool useAutoSave = false)
+      : nameWithExtension(nameWithExtension), data(data), useAutoSave(useAutoSave)
       {};
-      std::string targetArgument;
       std::string nameWithExtension;
+      mitk::BaseData::Pointer data;
+      // Files are written with mitk::IOUtil if an appropriate writer exist
+      bool useAutoSave;
     };
 
     
     
 
-    struct OutputInfo{
-      OutputInfo(std::string path, bool autoLoad = false, bool isFlagOnly = false, bool isDirectory = false, std::vector<std::string> directoryFileNames = {})
+    struct LoadDataInfo{
+      LoadDataInfo(std::string path, bool autoLoad = false, bool isFlagOnly = false, bool isDirectory = false, std::vector<std::string> directoryFileNames = {})
       : 
       path(path), 
       useAutoLoad(autoLoad),
@@ -77,7 +80,7 @@ namespace mitk
       
 
       // path is stored but not used/passed as argument-value for this argument
-      // e.g. for the argument flag "--preview", the OutputInfo("preview.png", ...)
+      // e.g. for the argument flag "--preview", the LoadDataInfo("preview.png", ...)
       // if isFlagOnly is false, the path is added
       //    "<cmd> --preview preview.png"
       // if isFlagOnly is true, the path is dropped
@@ -98,16 +101,19 @@ namespace mitk
     std::string GetFilePath(std::string path);
 
     // void SetData(mitk::BaseData::Pointer data, std::string targetArgument, std::string extension);
-    DataInfo* AddData(mitk::BaseData::Pointer data, std::string targetArgument, std::string nameWithExtension);
-    OutputInfo* AddAutoLoadOutput(std::string targetArgument, std::string nameWithExtension,  bool isFlagOnly=false);
-    OutputInfo* AddAutoLoadOutputFolder(std::string targetArgument, std::string directory, std::vector<std::string> expectedFilenames);
-    OutputInfo* AddLoadLaterOutput(std::string targetArgument, std::string nameWithExtension, bool isFlagOnly=false);
+    SaveDataInfo* AddAutoSaveData(mitk::BaseData::Pointer data, std::string targetArgument, std::string nameWithExtension);
+    SaveDataInfo* AddSaveLaterData(mitk::BaseData::Pointer data, std::string targetArgument, std::string nameWithExtension);
+    
+    LoadDataInfo* AddAutoLoadOutput(std::string targetArgument, std::string nameWithExtension,  bool isFlagOnly=false);
+    LoadDataInfo* AddAutoLoadOutputFolder(std::string targetArgument, std::string directory, std::vector<std::string> expectedFilenames);
+    LoadDataInfo* AddLoadLaterOutput(std::string targetArgument, std::string nameWithExtension, bool isFlagOnly=false);
+    
     void AddAutoLoadFileFormWorkingDirectory(std::string expectedFilename);
 
     std::vector<mitk::BaseData::Pointer> GetResults();
     void EnableAutoRemoveImage(bool value);
     void EnableAutoRemoveContainer(bool value);
-    std::string GetWorkingDirectory() const;
+    boost::filesystem::path GetWorkingDirectory() const;
     
     
     void AddApplicationArgument(std::string targetParameter, std::string what = "");
@@ -122,16 +128,14 @@ namespace mitk
       std::vector<std::string> application;
     };
 
-    std::string m_ImageName, m_WorkingDirectory;
+    std::string m_ImageName;
+    boost::filesystem::path m_WorkingDirectory;
     bool m_AutoRemoveImage = false;
     bool m_AutoRemoveContainer = false;
     
     
-
-    
-
-    std::map<mitk::BaseData::Pointer, DataInfo> m_Data;
-    std::map<std::string, OutputInfo> m_Outputs;
+    std::map<std::string, SaveDataInfo> m_SaveDataInfo;
+    std::map<std::string, LoadDataInfo> m_LoadDataInfo;
     
     // extra parameters for the embedded application
     std::vector<std::string> m_AdditionalApplicationArguments;
@@ -142,18 +146,10 @@ namespace mitk
     std::vector<mitk::BaseData::Pointer> m_OutputData;
     std::vector<std::string> m_AutoLoadFilenamesFromWorkingDirectory;
 
-    // std::map<DiskPath, ContainerPath> m_ReadableData;
-
-    static std::string CreateWorkingDirectory();
-    static void RemoveWorkingDirectory(std::string);
-
-
-
     void ExecuteDockerCommand(std::string command, const std::vector<std::string> & args);
     void Run(const std::vector<std::string> &cmdArgs, const std::vector<std::string> &entryPointArgs);
     void RemoveImage(std::vector<std::string> args = {});
     void LoadResults();
-    
 
     MappingsAndArguments DataToDockerRunArguments() const;
 
