@@ -42,7 +42,7 @@ bool mitk::DockerHelper::CheckDocker() {
 }
 
 std::string mitk::DockerHelper::GetFilePath(std::string path) {
-  return itksys::SystemTools::ConvertToOutputPath(m_WorkingDirectory + "/" + path);
+  return (m_WorkingDirectory / path).string();
 }
 
 void mitk::DockerHelper::AddApplicationArgument(std::string argumentName,
@@ -59,11 +59,11 @@ void mitk::DockerHelper::AddRunArgument(std::string targetArgument,
     m_AdditionalRunArguments.push_back(what);
 }
 
-mitk::DockerHelper::DataInfo *
-mitk::DockerHelper::AddData(mitk::BaseData::Pointer data,
-                            std::string targetArgument,
-                            std::string nameWithExtension) {
-  auto res = m_Data.try_emplace(data, targetArgument, nameWithExtension);
+mitk::DockerHelper::SaveDataInfo *
+mitk::DockerHelper::AddAutoSaveData(mitk::BaseData::Pointer data,
+                                    std::string targetArgument,
+                                    std::string nameWithExtension) {
+  auto res = m_SaveDataInfo.try_emplace(targetArgument, nameWithExtension, data, AUTOSAVE);
   if (res.second) {
     return &(res.first->second);
   } else { // !res.second
@@ -72,11 +72,25 @@ mitk::DockerHelper::AddData(mitk::BaseData::Pointer data,
   }
 }
 
-mitk::DockerHelper::OutputInfo * 
+mitk::DockerHelper::SaveDataInfo *
+mitk::DockerHelper::AddSaveLaterData(mitk::BaseData::Pointer data,
+                                     std::string targetArgument,
+                                     std::string nameWithExtension) {
+  auto res = m_SaveDataInfo.try_emplace(targetArgument, nameWithExtension, data, !AUTOSAVE);
+  if (res.second) {
+    return &(res.first->second);
+  } else { // !res.second
+    mitkThrow()
+        << "Warning! Overriding an already inserted argument is not allowed!";
+  }
+}
+
+mitk::DockerHelper::LoadDataInfo *
 mitk::DockerHelper::AddAutoLoadOutput(std::string targetArgument,
                                       std::string nameWithExtension,
                                       bool isFlagOnly) {
-  auto res = m_Outputs.try_emplace(targetArgument, nameWithExtension, AUTOLOAD, isFlagOnly);
+  auto res = m_LoadDataInfo.try_emplace(targetArgument, nameWithExtension, AUTOLOAD,
+                                   isFlagOnly);
   if (res.second) {
     return &(res.first->second);
   } else { // !res.second
@@ -85,11 +99,12 @@ mitk::DockerHelper::AddAutoLoadOutput(std::string targetArgument,
   }
 }
 
-mitk::DockerHelper::OutputInfo * 
+mitk::DockerHelper::LoadDataInfo *
 mitk::DockerHelper::AddLoadLaterOutput(std::string targetArgument,
                                        std::string nameWithExtension,
                                        bool isFlagOnly) {
-  auto res = m_Outputs.try_emplace(targetArgument, nameWithExtension, !AUTOLOAD, isFlagOnly);
+  auto res = m_LoadDataInfo.try_emplace(targetArgument, nameWithExtension, !AUTOLOAD,
+                                   isFlagOnly);
   if (res.second) {
     return &(res.first->second);
   } else { // !res.second
@@ -98,12 +113,11 @@ mitk::DockerHelper::AddLoadLaterOutput(std::string targetArgument,
   }
 }
 
-mitk::DockerHelper::OutputInfo *
-mitk::DockerHelper::AddAutoLoadOutputFolder(
+mitk::DockerHelper::LoadDataInfo *mitk::DockerHelper::AddAutoLoadOutputFolder(
     std::string targetArgument, std::string directory,
     std::vector<std::string> expectedFilenames) {
-  auto res = m_Outputs.try_emplace(targetArgument, directory, AUTOLOAD, !FLAG_ONLY, DIRECTORY,
-                                   expectedFilenames);
+  auto res = m_LoadDataInfo.try_emplace(targetArgument, directory, AUTOLOAD,
+                                   !FLAG_ONLY, DIRECTORY, expectedFilenames);
   if (res.second) {
     return &(res.first->second);
   } else { // !res.second
@@ -112,8 +126,8 @@ mitk::DockerHelper::AddAutoLoadOutputFolder(
   }
 }
 
-
-void mitk::DockerHelper::AddAutoLoadFileFormWorkingDirectory(std::string expectedFilename) {
+void mitk::DockerHelper::AddAutoLoadFileFormWorkingDirectory(
+    std::string expectedFilename) {
   m_AutoLoadFilenamesFromWorkingDirectory.push_back(expectedFilename);
 }
 
@@ -130,6 +144,7 @@ void mitk::DockerHelper::ExecuteDockerCommand(
   Poco::Process::Args processArgs;
   processArgs.push_back(command);
   for (auto a : args) {
+    MITK_INFO << a;
     processArgs.push_back(a);
   }
 
@@ -176,11 +191,10 @@ mitk::DockerHelper::DataToDockerRunArguments() const {
   // working directory name of the host system is used as mounting point name in
   // the container this folder is used as persistent communication bridge
   // between container and host and vice versa.
-  const auto dirPathContainer =
-      m_WorkingDirectory.substr(m_WorkingDirectory.rfind('/'));
+  const auto dirPathContainer = m_WorkingDirectory.filename();
   // add this as not "read only" mapping
   ma.docker.push_back("-v");
-  ma.docker.push_back(m_WorkingDirectory + ":" + dirPathContainer);
+  ma.docker.push_back(m_WorkingDirectory.string() + ":/" + dirPathContainer.string());
 
   // add custom run arguments
   ma.docker.insert(end(ma.docker), begin(m_AdditionalRunArguments),
@@ -191,9 +205,10 @@ mitk::DockerHelper::DataToDockerRunArguments() const {
                         end(m_AdditionalApplicationArguments));
 
   // Add input data
-  for (const auto kv : m_Data) {
-    const auto data = kv.first;
+  for (const auto kv : m_SaveDataInfo) {
+    const auto targetArgument = kv.first;
     const auto dataInfo = kv.second;
+    const auto data = dataInfo.data;
     std::string filePath;
     data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
                                                filePath);
@@ -202,73 +217,65 @@ mitk::DockerHelper::DataToDockerRunArguments() const {
         SystemTools::GetFilenameExtension(filePath);
 
     if (filePath.empty() || !hasSameExtension) {
-      const auto filePathHost = SystemTools::ConvertToOutputPath(
-          m_WorkingDirectory + "/" + dataInfo.nameWithExtension);
-      mitk::IOUtil::Save(data, filePathHost);
-      const auto filePathContainer = SystemTools::ConvertToOutputPath(
-          dirPathContainer + "/" + dataInfo.nameWithExtension);
-      ma.application.push_back(dataInfo.targetArgument);
-      ma.application.push_back(filePathContainer);
+      const auto filePathHost = m_WorkingDirectory / dataInfo.nameWithExtension;
+      mitk::IOUtil::Save(data, filePathHost.string());
+      const auto filePathContainer = dirPathContainer / dataInfo.nameWithExtension;
+      ma.application.push_back(targetArgument);
+      ma.application.push_back("/" + filePathContainer.string());
     } else {
       // Actual this dir is never used on the host system, but the name is
       // involved on in the container as mounting point
-      const auto phantomDirPathHost = mitk::HelperUtils::TempDirPath();
+      const auto phantomDirPathHost = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
       // Extract the directory name
-      const auto dirPathContainer =
-          phantomDirPathHost.substr(phantomDirPathHost.rfind('/'));
+      const auto dirPathContainer = phantomDirPathHost.filename();
       // so delete it on the host again
-      SystemTools::RemoveADirectory(phantomDirPathHost);
-
+      boost::filesystem::remove(phantomDirPathHost);
+      
       // find the files location (parent dir) on the host system
-      const auto dirPathHost = SystemTools::GetParentDirectory(filePath);
+      const auto dirPathHost = boost::filesystem::path(filePath).remove_filename();
 
       // mount this parent dir as read only into the container
       ma.docker.push_back("-v");
-      ma.docker.push_back(dirPathHost + ":" + dirPathContainer + ":ro");
+      ma.docker.push_back(dirPathHost.string() + ":/" + dirPathContainer.string() + ":ro");
 
-      auto fileName = SystemTools::GetFilenameWithoutExtension(filePath);
-      auto proposedExtension =
-          SystemTools::GetFilenameExtension(dataInfo.nameWithExtension);
+      auto fileName = boost::filesystem::path(filePath).filename();
+      auto proposedExtension = boost::filesystem::path(dataInfo.nameWithExtension).extension();
 
-      const auto filePathContainer = SystemTools::ConvertToOutputPath(
-          dirPathContainer + "/" + fileName + proposedExtension);
-      ma.application.push_back(dataInfo.targetArgument);
-      ma.application.push_back(filePathContainer);
+      const auto filePathContainer = dirPathContainer / fileName.replace_extension(proposedExtension);
+      ma.application.push_back(targetArgument);
+      ma.application.push_back("/" + filePathContainer.string());
     }
   }
 
-  for (const auto kv : m_Outputs) {
+  for (const auto kv : m_LoadDataInfo) {
     const auto argumentName = kv.first;
     const auto outputInfo = kv.second;
 
     // no directory
     if (!outputInfo.isDirectory) {
-
-      const auto filePathContainer = SystemTools::ConvertToOutputPath(
-          dirPathContainer + "/" + outputInfo.path);
+      const auto filePathContainer = dirPathContainer / outputInfo.path;
 
       ma.application.push_back(argumentName);
-      if(!outputInfo.isFlagOnly)
-        ma.application.push_back(filePathContainer);
+      if (!outputInfo.isFlagOnly)
+        ma.application.push_back("/" + filePathContainer.string());
 
     } else { // directory
 
       // find within container
-      const auto folderPathContainer = SystemTools::ConvertToOutputPath(
-          dirPathContainer + "/" + outputInfo.path);
+      const auto folderPathContainer = dirPathContainer / outputInfo.path;
 
       ma.application.push_back(argumentName);
-      if(!outputInfo.isFlagOnly)
-        ma.application.push_back(folderPathContainer);
+      if (!outputInfo.isFlagOnly)
+        ma.application.push_back("/" + folderPathContainer.string());
 
       if (SystemTools::GetFilenameExtension(outputInfo.path) != "") {
-        MITK_WARN << "Directory path [" << outputInfo.path << "] contains a dot";
+        MITK_WARN << "Directory path [" << outputInfo.path
+                  << "] contains a dot";
       }
 
       // create directory on host
-      const auto folderPathHost = SystemTools::ConvertToOutputPath(
-          m_WorkingDirectory + "/" + outputInfo.path);
-      SystemTools::MakeDirectory(folderPathHost);
+      const auto folderPathHost = m_WorkingDirectory / outputInfo.path;
+      boost::filesystem::create_directories(folderPathHost);
     }
   }
 
@@ -278,55 +285,52 @@ mitk::DockerHelper::DataToDockerRunArguments() const {
 void mitk::DockerHelper::LoadResults() {
 
   using namespace itksys;
-  // load all files in working directory  
-  if(!m_AutoLoadFilenamesFromWorkingDirectory.empty()){
-    for (auto filename : m_AutoLoadFilenamesFromWorkingDirectory) {
-      const auto fileInFolderPathHost = SystemTools::ConvertToOutputPath(
-          m_WorkingDirectory + "/" + filename);
-      if(SystemTools::FileExists(fileInFolderPathHost)){
-        auto data = mitk::IOUtil::Load(fileInFolderPathHost);
-        m_OutputData.insert(m_OutputData.end(), data.begin(), data.end());
-        MITK_INFO << "Loaded [Working Directory]: " << fileInFolderPathHost;
-      }
+  
+  // load files from working directory
+  for (auto filename : m_AutoLoadFilenamesFromWorkingDirectory) {
+    const auto fileInFolderPathHost = m_WorkingDirectory / filename;
+    if (boost::filesystem::exists(fileInFolderPathHost)) {
+      auto data = mitk::IOUtil::Load(fileInFolderPathHost.string());
+      m_OutputData.insert(m_OutputData.end(), data.begin(), data.end());
+      MITK_INFO << "Loaded [Working Directory]: " << fileInFolderPathHost;
     }
   }
 
 
-  for (const auto kv : m_Outputs) {
+  for (const auto kv : m_LoadDataInfo) {
     const auto argumentName = kv.first;
     const auto outputInfo = kv.second;
     if (outputInfo.useAutoLoad) {
 
       // load a file
       if (!outputInfo.isDirectory) {
-        const auto filePathHost = SystemTools::ConvertToOutputPath(
-            m_WorkingDirectory + "/" + outputInfo.path);
-        if(SystemTools::FileExists(filePathHost)){
-          auto data = mitk::IOUtil::Load(filePathHost);
+        const auto filePathHost = m_WorkingDirectory / outputInfo.path;
+        if (boost::filesystem::exists(filePathHost)) {
+          auto data = mitk::IOUtil::Load(filePathHost.string());
           m_OutputData.insert(m_OutputData.end(), data.begin(), data.end());
-          MITK_INFO << "Loaded [File]: " << filePathHost << " for argument " << argumentName;
-        }else{
-          MITK_WARN << "FAILD: Loaded [File]: " << filePathHost << " for argument " << argumentName;
+          MITK_INFO << "Loaded [File]: " << filePathHost << " for argument "
+                    << argumentName;
+        } else {
+          MITK_WARN << "FAILD: Loaded [File]: " << filePathHost
+                    << " for argument " << argumentName;
         }
       } else { // load all files in directory
 
         for (auto filename : outputInfo.directoryFileNames) {
-          const auto fileInFolderPathHost = SystemTools::ConvertToOutputPath(
-              m_WorkingDirectory + "/" + outputInfo.path + "/" + filename);
-          if(SystemTools::FileExists(fileInFolderPathHost)){
-            auto data = mitk::IOUtil::Load(fileInFolderPathHost);
+          const auto fileInFolderPathHost =  m_WorkingDirectory / outputInfo.path / filename;
+          if (boost::filesystem::exists(fileInFolderPathHost)) {
+            auto data = mitk::IOUtil::Load(fileInFolderPathHost.string());
             m_OutputData.insert(m_OutputData.end(), data.begin(), data.end());
-            MITK_INFO << "Loaded [Directory]: " << fileInFolderPathHost << " for argument " << argumentName;
+            MITK_INFO << "Loaded [Directory]: " << fileInFolderPathHost
+                      << " for argument " << argumentName;
           }
         }
       }
-  
-
     }
   }
 }
 
-std::string mitk::DockerHelper::GetWorkingDirectory() const {
+boost::filesystem::path mitk::DockerHelper::GetWorkingDirectory() const {
   return m_WorkingDirectory;
 }
 

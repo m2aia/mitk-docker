@@ -51,8 +51,8 @@ public:
     data->GetPropertyList()->SetStringProperty("MITK.IO.reader.inputlocation", filePath);
 
     mitk::DockerHelper helper("sparse_pca");
-    // helper.AddData(data.front(), "--test", "unique_name_if_needed.nrrd");
-    helper.AddData(data, "--imzml", "default.imzML");
+    // helper.AddAutoSaveData(data.front(), "--test", "unique_name_if_needed.nrrd");
+    helper.AddAutoSaveData(data, "--imzml", "default.imzML");
     helper.AddLoadLaterOutput("--csv", "pca_data.csv");
     helper.AddAutoLoadOutput("--image", "pca_data.nrrd");
     helper.GetResults();
