@@ -16,7 +16,6 @@ See LICENSE.txt for details.
 
 #include <mitkDockerHelper.h>
 #include <cppunit/TestFixture.h>
-#include <m2TestingConfig.h>
 #include <mitkImageCast.h>
 #include <mitkImagePixelWriteAccessor.h>
 #include <mitkTestFixture.h>

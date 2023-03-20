@@ -22,7 +22,6 @@ See LICENSE.txt for details.
 #include <mitkHelperUtils.h>
 #include <mitkIOUtil.h>
 
-#include <dirent.h>
 #include <iostream>
 
 bool mitk::DockerHelper::CheckDocker() {
