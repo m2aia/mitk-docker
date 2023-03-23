@@ -29,8 +29,4 @@ Supported platforms and other requirements
 
 License
 -------
-
-Copyright (c) [Jonas Cordes](https://www.m2aia.de)<br>
-All rights reserved.
-
-The mitk-docker is part of [M2aia](https://github.com/m2aia/m2aia) and as such available as free open-source software under a [3-clause BSD license](https://github.com/jtfcordes/mitk-docker/blob/master/LICENSE).
+See the LICENSE file for more details.
