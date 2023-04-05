@@ -105,6 +105,7 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
   if (m_Controls.cbPreview->isChecked())
     helper.AddAutoLoadOutput("--preview", "preview.png", helper.FLAG_ONLY);
 
+  helper.EnableAutoRemoveContainer(true);
   auto results = helper.GetResults();
   std::string filePath;
   for (auto image : results) {
