@@ -56,22 +56,31 @@ namespace mitk
       {};
       std::string nameWithExtension;
       mitk::BaseData::Pointer data;
+      
       // Files are written with mitk::IOUtil if an appropriate writer exist
       bool useAutoSave;
+      
+      // if autosave is false, this path will be provided for later usage
+      boost::filesystem::path manualSavePath;
     };
 
     
     
 
     struct LoadDataInfo{
-      LoadDataInfo(std::string path, bool autoLoad = false, bool isFlagOnly = false, bool isDirectory = false, std::vector<std::string> directoryFileNames = {})
+      LoadDataInfo(std::string arg, std::string path, bool autoLoad = false, bool isFlagOnly = false, bool isDirectory = false, std::vector<std::string> directoryFileNames = {})
       : 
+      arg(arg),
       path(path), 
       useAutoLoad(autoLoad),
       isFlagOnly(isFlagOnly),
       isDirectory(isDirectory),
       directoryFileNames(directoryFileNames)
       {};
+
+      // target argument
+      std::string arg;
+
       // the directory will be created relative to the working directory
       std::string path;
 
@@ -136,8 +145,8 @@ namespace mitk
     bool m_UseGPUs = false;
     
     
-    std::map<std::string, SaveDataInfo> m_SaveDataInfo;
-    std::map<std::string, LoadDataInfo> m_LoadDataInfo;
+    mutable std::map<std::string, SaveDataInfo> m_SaveDataInfo;
+    std::vector<LoadDataInfo> m_LoadDataInfo;
     
     // extra parameters for the embedded application
     std::vector<std::string> m_AdditionalApplicationArguments;
