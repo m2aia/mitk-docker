@@ -27,12 +27,12 @@ namespace mitk
 {
   namespace HelperUtils
   {
-    std::string TempDirPath() {
+    inline std::string TempDirPath() {
       auto path = mitk::IOUtil::CreateTemporaryDirectory("m2_XXXXXX");
       return itksys::SystemTools::ConvertToOutputPath(path);
     }
 
-    std::string FilePath(std::string path, std::string ext) {
+    inline std::string FilePath(std::string path, std::string ext) {
       return mitk::IOUtil::CreateTemporaryFile("XXXXXX", path) + ext;
     }
     
@@ -43,13 +43,13 @@ namespace mitk
      * @param args is a vector of strings
      * @return std::string
      */
-    std::string JoinPath(std::vector<std::string> &&args)
+    inline std::string JoinPath(std::vector<std::string> &&args)
     {
       return itksys::SystemTools::ConvertToOutputPath(itksys::SystemTools::JoinPath(args));
     }
 
 
-    mitk::Image::Pointer GetVectorImage3D(std::array<unsigned int,3> dimensions, unsigned int components ){
+    inline mitk::Image::Pointer GetVectorImage3D(std::array<unsigned int,3> dimensions, unsigned int components ){
       auto vectorImage = itk::VectorImage<double, 3>::New();
       vectorImage->SetVectorLength(components);
 
