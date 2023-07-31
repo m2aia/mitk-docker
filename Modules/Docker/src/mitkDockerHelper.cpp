@@ -130,7 +130,11 @@ void mitk::DockerHelper::AddAutoLoadFileFormWorkingDirectory(
   m_AutoLoadFilenamesFromWorkingDirectory.push_back(expectedFilename);
 }
 
-void mitk::DockerHelper::EnableAutoRemoveImage(bool value) {
+void mitk::DockerHelper::EnableGPUs(bool value)
+{
+  m_UseGPUs = value;
+}
+
   m_AutoRemoveImage = value;
 }
 
@@ -168,6 +172,13 @@ void mitk::DockerHelper::Run(const std::vector<std::string> &cmdArgs,
   if (m_AutoRemoveContainer &&
       std::find(args.begin(), args.end(), "--rm") == args.end())
     args.push_back("--rm");
+
+  if (m_UseGPUs &&
+      std::find(args.begin(), args.end(), "--gpus") == args.end())
+  {
+    args.push_back("--gpus");
+    args.push_back("all");
+  }
 
   args.push_back(m_ImageName);
   args.insert(args.end(), entryPointArgs.begin(), entryPointArgs.end());

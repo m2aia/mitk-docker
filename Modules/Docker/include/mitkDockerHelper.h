@@ -112,6 +112,7 @@ namespace mitk
 
     std::vector<mitk::BaseData::Pointer> GetResults();
     void EnableAutoRemoveImage(bool value);
+    void EnableGPUs(bool value);
     void EnableAutoRemoveContainer(bool value);
     boost::filesystem::path GetWorkingDirectory() const;
     
@@ -132,6 +133,7 @@ namespace mitk
     boost::filesystem::path m_WorkingDirectory;
     bool m_AutoRemoveImage = false;
     bool m_AutoRemoveContainer = false;
+    bool m_UseGPUs = false;
     
     
     std::map<std::string, SaveDataInfo> m_SaveDataInfo;
