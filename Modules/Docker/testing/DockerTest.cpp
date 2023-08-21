@@ -51,7 +51,7 @@ public:
 
     mitk::DockerHelper helper("sparse_pca");
     // helper.AddAutoSaveData(data.front(), "--test", "unique_name_if_needed.nrrd");
-    helper.AddAutoSaveData(data, "--imzml", "default.imzML");
+    helper.AddAutoSaveData(data, "--imzml", "default.", "imzML");
     helper.AddLoadLaterOutput("--csv", "pca_data.csv");
     helper.AddAutoLoadOutput("--image", "pca_data.nrrd");
     helper.GetResults();

@@ -24,6 +24,9 @@ See LICENSE.txt for details.
 
 #include <iostream>
 
+#include <boost/format.hpp>
+
+
 bool mitk::DockerHelper::CheckDocker()
 {
   std::string command = "docker ps";
@@ -66,9 +69,28 @@ void mitk::DockerHelper::AddRunArgument(std::string targetArgument,
 mitk::DockerHelper::SaveDataInfo *
 mitk::DockerHelper::AddAutoSaveData(mitk::BaseData::Pointer data,
                                     std::string targetArgument,
-                                    std::string nameWithExtension)
+                                    std::string name,
+                                    std::string extension)
 {
-  auto res = m_SaveDataInfo.try_emplace(targetArgument, nameWithExtension, data, AUTOSAVE);
+  auto res = m_SaveDataInfo.try_emplace(targetArgument, name, extension, std::vector<mitk::BaseData::Pointer>{data}, AUTOSAVE, SINGLE_FILE);
+  if (res.second)
+  {
+    return &(res.first->second);
+  }
+  else
+  { // !res.second
+    mitkThrow()
+        << "Warning! Overriding an already inserted argument is not allowed!";
+  }
+}
+
+mitk::DockerHelper::SaveDataInfo *
+mitk::DockerHelper::AddAutoSaveData(std::vector<mitk::BaseData::Pointer> data,
+                                    std::string targetArgument,
+                                    std::string name,
+                                    std::string extension)
+{
+  auto res = m_SaveDataInfo.try_emplace(targetArgument, name, extension, data, AUTOSAVE, !SINGLE_FILE);
   if (res.second)
   {
     return &(res.first->second);
@@ -83,9 +105,10 @@ mitk::DockerHelper::AddAutoSaveData(mitk::BaseData::Pointer data,
 mitk::DockerHelper::SaveDataInfo *
 mitk::DockerHelper::AddSaveLaterData(mitk::BaseData::Pointer data,
                                      std::string targetArgument,
-                                     std::string nameWithExtension)
+                                     std::string name,
+                                     std::string extension)
 {
-  auto res = m_SaveDataInfo.try_emplace(targetArgument, nameWithExtension, data, !AUTOSAVE);
+  auto res = m_SaveDataInfo.try_emplace(targetArgument, name, extension, std::vector<mitk::BaseData::Pointer>{data}, !AUTOSAVE, SINGLE_FILE);
   if (res.second)
   {
     return &(res.first->second);
@@ -113,7 +136,7 @@ mitk::DockerHelper::AddLoadLaterOutput(std::string targetArgument,
                                        bool isFlagOnly)
 {
   m_LoadDataInfo.emplace_back(targetArgument, nameWithExtension, !AUTOLOAD,
-                             isFlagOnly);
+                              isFlagOnly);
   return &(m_LoadDataInfo.back());
 }
 
@@ -122,7 +145,7 @@ mitk::DockerHelper::LoadDataInfo *mitk::DockerHelper::AddAutoLoadOutputFolder(
     std::vector<std::string> expectedFilenames)
 {
   m_LoadDataInfo.emplace_back(targetArgument, directory, AUTOLOAD,
-                             !FLAG_ONLY, DIRECTORY, expectedFilenames);
+                              !FLAG_ONLY, DIRECTORY, expectedFilenames);
   return &(m_LoadDataInfo.back());
 }
 
@@ -230,48 +253,83 @@ mitk::DockerHelper::DataToDockerRunArguments() const
   {
     std::string targetArgument = kv.first;
     SaveDataInfo &dataInfo = kv.second;
-    const auto data = dataInfo.data;
-    std::string filePath = "";
-    data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
-                                               filePath);
-    const bool hasSameExtension =
-        SystemTools::GetFilenameExtension(dataInfo.nameWithExtension) ==
-        SystemTools::GetFilenameExtension(filePath);
+    const auto dataVector = dataInfo.data;
 
-    auto filePathHost = m_WorkingDirectory / dataInfo.nameWithExtension;
-    dataInfo.manualSavePath = filePathHost;
-
-    if (filePath.empty() || !hasSameExtension)
-    { // file not on disk or different extension
-      MITK_INFO << filePathHost.string() << " " << data;
-      mitk::IOUtil::Save(data, filePathHost.string());
-      const auto filePathContainer = dirPathContainer / dataInfo.nameWithExtension;
-      ma.application.push_back(targetArgument);
-      ma.application.push_back("/" + filePathContainer.string());
-    }
-    else
+    // save multiple objects to a folder given by dataInfo.nameWithExtension
+    if (!dataInfo.isSingleFile)
     {
-      // Actual this dir is never used on the host system, but the name is
-      // involved on in the container as mounting point
-      const auto phantomDirPathHost = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
-      // Extract the directory name
-      const auto dirPathContainer = phantomDirPathHost.filename();
-      // so delete it on the host again
-      boost::filesystem::remove(phantomDirPathHost);
+     
+      { // create data folder
+        const auto splitPos = dataInfo.name.find("/");
+        const auto folderName = dataInfo.name.substr(0, splitPos);
+        const auto dirPathHost = m_WorkingDirectory / folderName;
+        boost::filesystem::create_directory(dirPathHost);
+      }
+      
+      int i = 0;
+      for(auto data: dataVector){
+        const auto fileRelativeFilePath = boost::filesystem::path((boost::format(dataInfo.name) % i).str() + dataInfo.extension);
 
-      // find the files location (parent dir) on the host system
-      const auto dirPathHost = boost::filesystem::path(filePath).remove_filename();
+        const auto filePathHost = m_WorkingDirectory / fileRelativeFilePath;
+        MITK_INFO << "Write " << filePathHost.string();
+        mitk::IOUtil::Save(data, filePathHost.string());
+        ++i;
+      }
 
-      // mount this parent dir as read only into the container
-      ma.docker.push_back("-v");
-      ma.docker.push_back(dirPathHost.string() + ":/" + dirPathContainer.string() + ":ro");
-
-      auto fileName = boost::filesystem::path(filePath).filename();
-      auto proposedExtension = boost::filesystem::path(dataInfo.nameWithExtension).extension();
-
-      const auto filePathContainer = dirPathContainer / fileName.replace_extension(proposedExtension);
+      // the target folder is passed as command line argument instead of a file name
+      // this has to be handled of the target script
+      const auto splitPos = dataInfo.name.find("/");
+      const auto folderName = dataInfo.name.substr(0, splitPos);
       ma.application.push_back(targetArgument);
-      ma.application.push_back("/" + filePathContainer.string());
+      ma.application.push_back("/" + (dirPathContainer / folderName).string());
+
+
+    }
+    // save/link a single data object
+    else 
+    {
+      auto data = dataVector.front();
+
+      std::string filePath = "";
+      data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
+                                                 filePath);
+      const bool hasSameExtension =
+          dataInfo.extension == SystemTools::GetFilenameExtension(filePath);
+
+      auto filePathHost = m_WorkingDirectory / (dataInfo.name + dataInfo.extension);
+      dataInfo.manualSavePath = filePathHost;
+
+      if (filePath.empty() || !hasSameExtension)
+      { // file not on disk or different extension
+        // MITK_INFO << filePathHost.string() << " " << data;
+        mitk::IOUtil::Save(data, filePathHost.string());
+        const auto filePathContainer = dirPathContainer / (dataInfo.name + dataInfo.extension);
+        ma.application.push_back(targetArgument);
+        ma.application.push_back("/" + filePathContainer.string());
+      }
+      else
+      {
+        // Actual this dir is never used on the host system, but the name is
+        // involved on in the container as mounting point
+        const auto phantomDirPathHost = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
+        // Extract the directory name
+        const auto dirPathContainer = phantomDirPathHost.filename();
+        // so delete it on the host again
+        boost::filesystem::remove(phantomDirPathHost);
+
+        // find the files location (parent dir) on the host system
+        const auto dirPathHost = boost::filesystem::path(filePath).remove_filename();
+
+        // mount this parent dir as read only into the container
+        ma.docker.push_back("-v");
+        ma.docker.push_back(dirPathHost.string() + ":/" + dirPathContainer.string() + ":ro");
+
+        auto fileName = boost::filesystem::path(filePath).filename();
+
+        const auto filePathContainer = dirPathContainer / fileName.replace_extension(dataInfo.extension);
+        ma.application.push_back(targetArgument);
+        ma.application.push_back("/" + filePathContainer.string());
+      }
     }
   }
 

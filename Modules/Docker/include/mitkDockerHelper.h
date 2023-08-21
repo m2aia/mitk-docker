@@ -42,6 +42,7 @@ namespace mitk
    public:
     const bool AUTOLOAD = true;
     const bool AUTOSAVE = true;
+    const bool SINGLE_FILE = true;
     const bool DIRECTORY = true;
     const bool FLAG_ONLY = true;
 
@@ -51,17 +52,45 @@ namespace mitk
     }
 
     struct SaveDataInfo{
-      SaveDataInfo(std::string nameWithExtension, mitk::BaseData::Pointer data, bool useAutoSave = false)
-      : nameWithExtension(nameWithExtension), data(data), useAutoSave(useAutoSave)
-      {};
-      std::string nameWithExtension;
-      mitk::BaseData::Pointer data;
+      SaveDataInfo(const std::string & name, const std::string & extension, const std::vector<mitk::BaseData::Pointer> & data, bool useAutoSave = false, bool isSingleFile = true)
+      : name(name), extension(extension), data{data}, useAutoSave(useAutoSave), isSingleFile(isSingleFile)
+      {
+        if(name.find(".") != std::string::npos)
+          mitkThrow() << "Do not use dots in file names";
+        
+        if(extension.find(".") == std::string::npos)
+          mitkThrow() << "Add a dot so that extension follows the pattern '.<extensionname>'";
+        
+        if(isSingleFile && name.find("%") != std::string::npos)
+          mitkThrow() << "boost::format strings not allowed for single file objects";
+
+        if(!isSingleFile && name.find("/") == std::string::npos)
+          mitkThrow() << "name requires to have a folder name (i.e. <foldername>/<filename_pattern>)";
+
+        
+
+
+      };
+      // name of the file
+      // or boost format pattern (i.e. dirname/filename_%1%) if used for multiple data objects 
+      // use only one placeholder for enumeration
+      std::string name;
+
+      // target extension with dot (i.e. ".nrrd")
+      std::string extension;
+      
+      // set or single object
+      std::vector<mitk::BaseData::Pointer> data;
       
       // Files are written with mitk::IOUtil if an appropriate writer exist
       bool useAutoSave;
       
       // if autosave is false, this path will be provided for later usage
       boost::filesystem::path manualSavePath;
+
+      // if file is part of a set of objects (isSingleFile==false)
+      // a directory is created and files are saved according to name pattern
+      bool isSingleFile;
     };
 
     
@@ -110,8 +139,9 @@ namespace mitk
     std::string GetFilePath(std::string path);
 
     // void SetData(mitk::BaseData::Pointer data, std::string targetArgument, std::string extension);
-    SaveDataInfo* AddAutoSaveData(mitk::BaseData::Pointer data, std::string targetArgument, std::string nameWithExtension);
-    SaveDataInfo* AddSaveLaterData(mitk::BaseData::Pointer data, std::string targetArgument, std::string nameWithExtension);
+    SaveDataInfo* AddAutoSaveData(mitk::BaseData::Pointer data, std::string targetArgument, std::string name, std::string extension);
+    SaveDataInfo* AddAutoSaveData(std::vector<mitk::BaseData::Pointer> data, std::string targetArgument, std::string name, std::string extension);
+    SaveDataInfo* AddSaveLaterData(mitk::BaseData::Pointer data, std::string targetArgument, std::string name, std::string extension);
     
     LoadDataInfo* AddAutoLoadOutput(std::string targetArgument, std::string nameWithExtension,  bool isFlagOnly=false);
     LoadDataInfo* AddAutoLoadOutputFolder(std::string targetArgument, std::string directory, std::vector<std::string> expectedFilenames);

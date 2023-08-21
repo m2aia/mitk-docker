@@ -90,7 +90,7 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
         "--roi_subset", m_Controls.textEdit->toPlainText().toStdString());
 
   // inputs
-  helper.AddAutoSaveData(image, "-i", "input_image.nii.gz");
+  helper.AddAutoSaveData(image, "-i", "input_image",".nii.gz");
 
   // output
   helper.AddAutoLoadOutputFolder("-o", "results",
