@@ -159,6 +159,10 @@ namespace mitk
     void AddApplicationArgument(std::string targetParameter, std::string what = "");
     void AddRunArgument(std::string targetArgument, std::string what = "");
     
+    static std::string Replace(std::string f, char a, char b){
+      std::replace(f.begin(), f.end(), a, b);
+      return f;
+    }
 
   protected:
     
@@ -193,6 +197,7 @@ namespace mitk
     void LoadResults();
 
     MappingsAndArguments DataToDockerRunArguments() const;
+
 
  
 

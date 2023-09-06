@@ -175,11 +175,14 @@ void mitk::DockerHelper::ExecuteDockerCommand(
 {
   Poco::Process::Args processArgs;
   processArgs.push_back(command);
+  std::stringstream ss;
+  ss << "docker run";
   for (auto a : args)
   {
-    MITK_INFO << a;
+     ss << " " << a;
     processArgs.push_back(a);
   }
+  MITK_INFO << ss.str();
 
   // launch the process
   Poco::Process p;
@@ -238,7 +241,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
   const auto dirPathContainer = m_WorkingDirectory.filename();
   // add this as not "read only" mapping
   ma.docker.push_back("-v");
-  ma.docker.push_back(m_WorkingDirectory.string() + ":/" + dirPathContainer.string());
+  ma.docker.push_back(m_WorkingDirectory.string() + ":/" + Replace(dirPathContainer.string(),'\\','/'));
 
   // add custom run arguments
   ma.docker.insert(end(ma.docker), begin(m_AdditionalRunArguments),
@@ -269,9 +272,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
       int i = 0;
       for(auto data: dataVector){
         const auto fileRelativeFilePath = boost::filesystem::path((boost::format(dataInfo.name) % i).str() + dataInfo.extension);
-
         const auto filePathHost = m_WorkingDirectory / fileRelativeFilePath;
-        MITK_INFO << "Write " << filePathHost.string();
         mitk::IOUtil::Save(data, filePathHost.string());
         ++i;
       }
@@ -281,7 +282,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
       const auto splitPos = dataInfo.name.find("/");
       const auto folderName = dataInfo.name.substr(0, splitPos);
       ma.application.push_back(targetArgument);
-      ma.application.push_back("/" + (dirPathContainer / folderName).string());
+      ma.application.push_back("/" + Replace((dirPathContainer / folderName).string(),'\\', '/'));
 
 
     }
@@ -305,7 +306,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
         mitk::IOUtil::Save(data, filePathHost.string());
         const auto filePathContainer = dirPathContainer / (dataInfo.name + dataInfo.extension);
         ma.application.push_back(targetArgument);
-        ma.application.push_back("/" + filePathContainer.string());
+        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
       }
       else
       {
@@ -322,13 +323,13 @@ mitk::DockerHelper::DataToDockerRunArguments() const
 
         // mount this parent dir as read only into the container
         ma.docker.push_back("-v");
-        ma.docker.push_back(dirPathHost.string() + ":/" + dirPathContainer.string() + ":ro");
+        ma.docker.push_back(dirPathHost.string() + ":/" + Replace(dirPathContainer.string(), '\\', '/') + ":ro");
 
         auto fileName = boost::filesystem::path(filePath).filename();
 
         const auto filePathContainer = dirPathContainer / fileName.replace_extension(dataInfo.extension);
         ma.application.push_back(targetArgument);
-        ma.application.push_back("/" + filePathContainer.string());
+        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
       }
     }
   }
@@ -344,7 +345,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
 
       ma.application.push_back(argumentName);
       if (!outputInfo.isFlagOnly)
-        ma.application.push_back("/" + filePathContainer.string());
+        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
     }
     else
     { // directory
@@ -354,7 +355,7 @@ mitk::DockerHelper::DataToDockerRunArguments() const
 
       ma.application.push_back(argumentName);
       if (!outputInfo.isFlagOnly)
-        ma.application.push_back("/" + folderPathContainer.string());
+        ma.application.push_back("/" + Replace(folderPathContainer.string(),'\\','/'));
 
       if (SystemTools::GetFilenameExtension(outputInfo.path) != "")
       {
