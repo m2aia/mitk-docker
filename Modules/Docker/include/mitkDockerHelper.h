@@ -135,7 +135,7 @@ namespace mitk
 
     };
     
-    static bool CheckDocker();
+    static bool CanRunDocker();
     std::string GetFilePath(std::string path);
 
     // void SetData(mitk::BaseData::Pointer data, std::string targetArgument, std::string extension);
@@ -167,11 +167,6 @@ namespace mitk
   protected:
     
 
-    struct MappingsAndArguments{
-      std::vector<std::string> docker;
-      std::vector<std::string> application;
-    };
-
     std::string m_ImageName;
     boost::filesystem::path m_WorkingDirectory;
     bool m_AutoRemoveImage = false;
@@ -191,12 +186,17 @@ namespace mitk
     std::vector<mitk::BaseData::Pointer> m_OutputData;
     std::vector<std::string> m_AutoLoadFilenamesFromWorkingDirectory;
 
+    std::vector<std::string> m_DockerArguments;
+    std::vector<std::string> m_ProgramArguments;
+
     void ExecuteDockerCommand(std::string command, const std::vector<std::string> & args);
+    void GenerateRunData();
     void Run(const std::vector<std::string> &cmdArgs, const std::vector<std::string> &entryPointArgs);
     void RemoveImage(std::vector<std::string> args = {});
-    void LoadResults();
+    void GenerateSaveDataInfoAndSaveData();
+    void GenerateLoadDataInfo();
+    void LoadData();
 
-    MappingsAndArguments DataToDockerRunArguments() const;
 
 
  

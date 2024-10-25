@@ -33,7 +33,7 @@ class DockerTestSuite : public mitk::TestFixture
 
 public:
   void FindDocker(){
-    CPPUNIT_ASSERT(mitk::DockerHelper::CheckDocker());
+    CPPUNIT_ASSERT(mitk::DockerHelper::CanRunDocker());
   }
 
   void RunHelloWorldContainer_NoThrow(){

@@ -27,7 +27,7 @@ See LICENSE.txt for details.
 #include <boost/format.hpp>
 
 
-bool mitk::DockerHelper::CheckDocker()
+bool mitk::DockerHelper::CanRunDocker()
 {
   std::string command = "docker ps";
 
@@ -228,29 +228,37 @@ void mitk::DockerHelper::RemoveImage(std::vector<std::string> args)
   ExecuteDockerCommand("rmi", args);
 }
 
-mitk::DockerHelper::MappingsAndArguments
-mitk::DockerHelper::DataToDockerRunArguments() const
+void mitk::DockerHelper::GenerateRunData()
 {
   using namespace itksys;
   using namespace std;
-  MappingsAndArguments ma;
-
+  
   // working directory name of the host system is used as mounting point name in
   // the container this folder is used as persistent communication bridge
   // between container and host and vice versa.
   const auto dirPathContainer = m_WorkingDirectory.filename();
   // add this as not "read only" mapping
-  ma.docker.push_back("-v");
-  ma.docker.push_back(m_WorkingDirectory.string() + ":/" + Replace(dirPathContainer.string(),'\\','/'));
+  m_DockerArguments.push_back("-v");
+  m_DockerArguments.push_back(m_WorkingDirectory.string() + ":/" + Replace(dirPathContainer.string(),'\\','/'));
 
   // add custom run arguments
-  ma.docker.insert(end(ma.docker), begin(m_AdditionalRunArguments),
+  m_DockerArguments.insert(end(m_DockerArguments), begin(m_AdditionalRunArguments),
                    end(m_AdditionalRunArguments));
 
-  ma.application.insert(end(ma.application),
+  m_ProgramArguments.insert(end(m_ProgramArguments),
                         begin(m_AdditionalApplicationArguments),
                         end(m_AdditionalApplicationArguments));
 
+  GenerateSaveDataInfoAndSaveData();
+  GenerateLoadDataInfo();
+
+  
+}
+
+void mitk::DockerHelper::GenerateSaveDataInfoAndSaveData(){
+  using namespace itksys;
+  using namespace std;
+  const auto dirPathContainer = m_WorkingDirectory.filename();
   // Add input data
   for (auto &kv : m_SaveDataInfo)
   {
@@ -281,8 +289,8 @@ mitk::DockerHelper::DataToDockerRunArguments() const
       // this has to be handled of the target script
       const auto splitPos = dataInfo.name.find("/");
       const auto folderName = dataInfo.name.substr(0, splitPos);
-      ma.application.push_back(targetArgument);
-      ma.application.push_back("/" + Replace((dirPathContainer / folderName).string(),'\\', '/'));
+      m_ProgramArguments.push_back(targetArgument);
+      m_ProgramArguments.push_back("/" + Replace((dirPathContainer / folderName).string(),'\\', '/'));
 
 
     }
@@ -305,8 +313,8 @@ mitk::DockerHelper::DataToDockerRunArguments() const
         // MITK_INFO << filePathHost.string() << " " << data;
         mitk::IOUtil::Save(data, filePathHost.string());
         const auto filePathContainer = dirPathContainer / (dataInfo.name + dataInfo.extension);
-        ma.application.push_back(targetArgument);
-        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
+        m_ProgramArguments.push_back(targetArgument);
+        m_ProgramArguments.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
       }
       else
       {
@@ -322,18 +330,24 @@ mitk::DockerHelper::DataToDockerRunArguments() const
         const auto dirPathHost = boost::filesystem::path(filePath).remove_filename();
 
         // mount this parent dir as read only into the container
-        ma.docker.push_back("-v");
-        ma.docker.push_back(dirPathHost.string() + ":/" + Replace(dirPathContainer.string(), '\\', '/') + ":ro");
+        m_DockerArguments.push_back("-v");
+        m_DockerArguments.push_back(dirPathHost.string() + ":/" + Replace(dirPathContainer.string(), '\\', '/') + ":ro");
 
         auto fileName = boost::filesystem::path(filePath).filename();
 
         const auto filePathContainer = dirPathContainer / fileName.replace_extension(dataInfo.extension);
-        ma.application.push_back(targetArgument);
-        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
+        m_ProgramArguments.push_back(targetArgument);
+        m_ProgramArguments.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
       }
     }
   }
+}
 
+
+void mitk::DockerHelper::GenerateLoadDataInfo(){
+  using namespace itksys;
+  using namespace std;
+  const auto dirPathContainer = m_WorkingDirectory.filename();
   for (const auto &outputInfo : m_LoadDataInfo)
   {
     const auto argumentName = outputInfo.arg;
@@ -343,9 +357,9 @@ mitk::DockerHelper::DataToDockerRunArguments() const
     {
       const auto filePathContainer = dirPathContainer / outputInfo.path;
 
-      ma.application.push_back(argumentName);
+      m_ProgramArguments.push_back(argumentName);
       if (!outputInfo.isFlagOnly)
-        ma.application.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
+        m_ProgramArguments.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
     }
     else
     { // directory
@@ -353,9 +367,9 @@ mitk::DockerHelper::DataToDockerRunArguments() const
       // find within container
       const auto folderPathContainer = dirPathContainer / outputInfo.path;
 
-      ma.application.push_back(argumentName);
+      m_ProgramArguments.push_back(argumentName);
       if (!outputInfo.isFlagOnly)
-        ma.application.push_back("/" + Replace(folderPathContainer.string(),'\\','/'));
+        m_ProgramArguments.push_back("/" + Replace(folderPathContainer.string(),'\\','/'));
 
       if (SystemTools::GetFilenameExtension(outputInfo.path) != "")
       {
@@ -368,11 +382,9 @@ mitk::DockerHelper::DataToDockerRunArguments() const
       boost::filesystem::create_directories(folderPathHost);
     }
   }
-
-  return ma;
 }
 
-void mitk::DockerHelper::LoadResults()
+void mitk::DockerHelper::LoadData()
 {
 
   using namespace itksys;
@@ -438,15 +450,15 @@ boost::filesystem::path mitk::DockerHelper::GetWorkingDirectory() const
 
 std::vector<mitk::BaseData::Pointer> mitk::DockerHelper::GetResults()
 {
-  if (!CheckDocker())
+  if (!CanRunDocker())
   {
     mitkThrow() << "No Docker instance found!";
   }
 
-  auto runArgs = DataToDockerRunArguments();
+  GenerateRunData();
 
-  Run(runArgs.docker, runArgs.application);
-  LoadResults();
+  Run(m_DockerArguments, m_ProgramArguments);
+  LoadData();
 
   MITK_INFO << "Size of the results vector " << m_OutputData.size();
 
