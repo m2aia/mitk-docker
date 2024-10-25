@@ -59,28 +59,24 @@ void QmitkTotalSegmentatorView::SetFocus() {
   m_Controls.btnRunTotalSegmentator->setFocus();
 }
 
-void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
-
+void QmitkTotalSegmentatorView::OnStartTotalSegmentator()
+{
   using namespace itksys;
   auto selectedDataNode = m_Controls.selectionWidget->GetSelectedNode();
   auto data = selectedDataNode->GetData();
-
-  // We don't use the auto keyword here, which would evaluate to a native
-  // image pointer. Instead, we want a smart pointer to ensure that
-  // the image isn't deleted somewhere else while we're using it.
   mitk::Image::Pointer image = dynamic_cast<mitk::Image *>(data);
 
-  mitk::DockerHelper helper("wasserth/totalsegmentator_container:master");
+  mitk::DockerHelper helper("wasserth/totalsegmentator:2.0.0");
   helper.AddRunArgument("--gpus", "device=0");
   helper.AddRunArgument("--ipc=host");
-
-  // arguments
   helper.AddApplicationArgument("TotalSegmentator");
-
-  mitk::DockerHelper::LoadDataInfo *mlResult = nullptr;
   if (m_Controls.cbMultiLabel->isChecked())
-    mlResult =
-        helper.AddLoadLaterOutput("--ml", "results.nii", helper.FLAG_ONLY);
+  {
+    helper.AddAutoLoadOutput("-o", "results.nii");
+    helper.AddApplicationArgument("--ml");
+  }
+  else
+    helper.AddAutoLoadOutputFolder("-o", "results", m_TotalSegmentatorResultFileNames);
 
   if (m_Controls.cbFast->isChecked())
     helper.AddApplicationArgument("--fast");
@@ -90,11 +86,7 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
         "--roi_subset", m_Controls.textEdit->toPlainText().toStdString());
 
   // inputs
-  helper.AddAutoSaveData(image, "-i", "input_image",".nii.gz");
-
-  // output
-  helper.AddAutoLoadOutputFolder("-o", "results",
-                                 m_TotalSegmentatorResultFileNames);
+  helper.AddAutoSaveData(image, "-i", "input_image", ".nii.gz");
 
   if (m_Controls.cbStatistics->isChecked())
     helper.AddLoadLaterOutput("--statistics", "statistics.json", helper.FLAG_ONLY);
@@ -107,33 +99,27 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator() {
 
   helper.EnableAutoRemoveContainer(true);
   auto results = helper.GetResults();
-  std::string filePath;
-  for (auto image : results) {
-    data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
-
-                                               filePath);
-    data->GetPropertyList()->RemoveProperty("MITK.IO.reader.inputlocation");
-
-    auto node = mitk::DataNode::New();
-    node->SetData(image);
-    node->SetName(SystemTools::GetFilenameWithoutExtension(filePath));
-    this->GetDataStorage()->Add(node, selectedDataNode);
-  }
-
-  if (mlResult) {
-    auto mlPath = helper.GetFilePath(mlResult->path);
-    auto results = mitk::IOUtil::Load(mlPath);
+  if (m_Controls.cbMultiLabel->isChecked())
+  {
     auto lsImage = mitk::LabelSetImage::New();
     lsImage->InitializeByLabeledImage(
         dynamic_cast<mitk::Image *>(results[0].GetPointer()));
     auto node = mitk::DataNode::New();
     node->SetData(lsImage);
     node->SetName("TotalSegmentator_multilabel");
-    // auto ls = lsImage->GetActiveLabelSet();
-    // for (unsigned t = 0; t < ls->GetNumberOfLabels(); ++t) {
-    //   lsImage->GetLabel(t)->SetName(SystemTools::GetFilenameWithoutExtension(m_TotalSegmentatorResultFileNames[t]));
-    // }
-
     this->GetDataStorage()->Add(node, selectedDataNode);
+  }
+  else
+  {
+    std::string filePath;
+    for (auto image : results)
+    {
+      data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation", filePath);
+      data->GetPropertyList()->RemoveProperty("MITK.IO.reader.inputlocation");
+      auto node = mitk::DataNode::New();
+      node->SetData(image);
+      node->SetName(SystemTools::GetFilenameWithoutExtension(filePath));
+      this->GetDataStorage()->Add(node, selectedDataNode);
+    }
   }
 }
