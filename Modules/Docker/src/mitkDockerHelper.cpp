@@ -325,15 +325,18 @@ void mitk::DockerHelper::GenerateSaveDataInfoAndSaveData(){
         const auto dirPathContainer = phantomDirPathHost.filename();
         // so delete it on the host again
         boost::filesystem::remove(phantomDirPathHost);
-
+        
+        auto fp = boost::filesystem::canonical(boost::filesystem::path(filePath));
+        MITK_INFO << fp;
         // find the files location (parent dir) on the host system
-        const auto dirPathHost = boost::filesystem::path(filePath).remove_filename();
+        auto dirPathHost = fp;
+        dirPathHost.remove_filename();  
 
         // mount this parent dir as read only into the container
         m_DockerArguments.push_back("-v");
         m_DockerArguments.push_back(dirPathHost.string() + ":/" + Replace(dirPathContainer.string(), '\\', '/') + ":ro");
 
-        auto fileName = boost::filesystem::path(filePath).filename();
+        auto fileName = fp.filename();
 
         const auto filePathContainer = dirPathContainer / fileName.replace_extension(dataInfo.extension);
         m_ProgramArguments.push_back(targetArgument);
