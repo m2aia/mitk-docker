@@ -157,6 +157,7 @@ namespace mitk
     
     
     void AddApplicationArgument(std::string targetParameter, std::string what = "");
+    std::vector<std::string> & GetAdditionalApplicationArguments(){return m_AdditionalApplicationArguments; }
     void AddRunArgument(std::string targetArgument, std::string what = "");
     
     static std::string Replace(std::string f, char a, char b){
