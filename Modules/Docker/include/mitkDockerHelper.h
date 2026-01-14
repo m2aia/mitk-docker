@@ -189,6 +189,9 @@ namespace mitk
 
     std::vector<std::string> m_DockerArguments;
     std::vector<std::string> m_ProgramArguments;
+    
+    // Track mapped volumes: source path -> container path
+    std::map<std::string, std::string> m_MappedVolumes;
 
     void ExecuteDockerCommand(std::string command, const std::vector<std::string> & args);
     void GenerateRunData();
@@ -197,6 +200,7 @@ namespace mitk
     void GenerateSaveDataInfoAndSaveData();
     void GenerateLoadDataInfo();
     void LoadData();
+    std::string AddOrReuseVolumeMapping(const std::string& sourcePathHost, bool readOnly = false);
 
 
 

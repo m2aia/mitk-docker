@@ -212,7 +212,7 @@ void mitk::DockerHelper::Run(const std::vector<std::string> &cmdArgs,
       std::find(args.begin(), args.end(), "--gpus") == args.end())
   {
     args.push_back("--gpus");
-    args.push_back("all");
+    args.push_back("device=all");
   }
 
   args.push_back(m_ImageName);
@@ -255,6 +255,34 @@ void mitk::DockerHelper::GenerateRunData()
   
 }
 
+std::string mitk::DockerHelper::AddOrReuseVolumeMapping(const std::string& sourcePathHost, bool readOnly)
+{
+  // Check if this source path is already mapped
+  auto it = m_MappedVolumes.find(sourcePathHost);
+  if (it != m_MappedVolumes.end())
+  {
+    // Reuse existing mapping
+    return it->second;
+  }
+  
+  // Create new mapping
+  const auto phantomDirPathHost = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
+  const auto containerPath = phantomDirPathHost.filename().string();
+  boost::filesystem::remove(phantomDirPathHost);
+  
+  // Add to docker arguments
+  m_DockerArguments.push_back("-v");
+  std::string volumeArg = sourcePathHost + ":/" + Replace(containerPath, '\\', '/');
+  if (readOnly)
+    volumeArg += ":ro";
+  m_DockerArguments.push_back(volumeArg);
+  
+  // Store mapping
+  m_MappedVolumes[sourcePathHost] = containerPath;
+  
+  return containerPath;
+}
+
 void mitk::DockerHelper::GenerateSaveDataInfoAndSaveData(){
   using namespace itksys;
   using namespace std;
@@ -269,26 +297,82 @@ void mitk::DockerHelper::GenerateSaveDataInfoAndSaveData(){
     // save multiple objects to a folder given by dataInfo.nameWithExtension
     if (!dataInfo.isSingleFile)
     {
-     
-      { // create data folder
-        const auto splitPos = dataInfo.name.find("/");
-        const auto folderName = dataInfo.name.substr(0, splitPos);
-        const auto dirPathHost = m_WorkingDirectory / folderName;
-        boost::filesystem::create_directory(dirPathHost);
-      }
+      // create data folder
+      const auto splitPos = dataInfo.name.find("/");
+      const auto folderName = dataInfo.name.substr(0, splitPos);
+      const auto dirPathHost = m_WorkingDirectory / folderName;
+      boost::filesystem::create_directory(dirPathHost);
       
       int i = 0;
       for(auto data: dataVector){
-        const auto fileRelativeFilePath = boost::filesystem::path((boost::format(dataInfo.name) % i).str() + dataInfo.extension);
-        const auto filePathHost = m_WorkingDirectory / fileRelativeFilePath;
-        mitk::IOUtil::Save(data, filePathHost.string());
+        std::string filePath = "";
+        data->GetPropertyList()->GetStringProperty("MITK.IO.reader.inputlocation",
+                                                   filePath);
+        const bool hasSameExtension =
+            dataInfo.extension == SystemTools::GetFilenameExtension(filePath);
+
+        if (filePath.empty() || !hasSameExtension)
+        { // file not on disk or different extension
+          const auto fileRelativeFilePath = boost::filesystem::path((boost::format(dataInfo.name) % i).str() + dataInfo.extension);
+          const auto filePathHost = m_WorkingDirectory / fileRelativeFilePath;
+          mitk::IOUtil::Save(data, filePathHost.string());
+        }
+        else
+        {
+          auto fp = boost::filesystem::canonical(boost::filesystem::path(filePath));
+          MITK_INFO << fp;
+          // find the files location (parent dir) on the host system
+          auto parentDirPathHost = fp;
+          parentDirPathHost.remove_filename();  
+
+          // mount this parent dir as read only into the container (reuse if already mapped)
+          const auto phantomDirPathContainer = AddOrReuseVolumeMapping(parentDirPathHost.string(), true);
+
+          auto originalFileName = fp.filename();
+          auto baseName = originalFileName.stem();
+          auto originalExtension = originalFileName.extension();
+          
+          // Create symlink in working directory folder with target filename
+          const auto fileRelativeFilePath = boost::filesystem::path((boost::format(dataInfo.name) % i).str() + dataInfo.extension);
+          const auto symlinkPathHost = m_WorkingDirectory / fileRelativeFilePath;
+          
+          // If extension changed, we need to copy/save the file
+          if (originalExtension.string() != dataInfo.extension)
+          {
+            mitk::IOUtil::Save(data, symlinkPathHost.string());
+          }
+          else
+          {
+            // Create symlink to original file in mounted volume
+            // The symlink target should be the path within the container's mounted volume
+            const auto fileInContainerPath = boost::filesystem::path("/") / phantomDirPathContainer / originalFileName;
+            
+            // Create relative symlink from working directory to mounted volume
+            auto relativeTarget = boost::filesystem::relative(fileInContainerPath, symlinkPathHost.parent_path());
+            boost::filesystem::create_symlink(relativeTarget, symlinkPathHost);
+            
+            // For imzML files, also symlink companion .ibd file
+            if (dataInfo.extension == ".imzML")
+            {
+              auto ibdFileName = baseName.string() + ".ibd";
+              auto ibdFilePath = parentDirPathHost / ibdFileName;
+              if (boost::filesystem::exists(ibdFilePath))
+              {
+                auto ibdSymlinkPath = symlinkPathHost;
+                ibdSymlinkPath.replace_extension(".ibd");
+                
+                const auto ibdFileInContainerPath = boost::filesystem::path("/") / phantomDirPathContainer / ibdFileName;
+                auto ibdRelativeTarget = boost::filesystem::relative(ibdFileInContainerPath, ibdSymlinkPath.parent_path());
+                boost::filesystem::create_symlink(ibdRelativeTarget, ibdSymlinkPath);
+              }
+            }
+          }
+        }
         ++i;
       }
 
       // the target folder is passed as command line argument instead of a file name
       // this has to be handled of the target script
-      const auto splitPos = dataInfo.name.find("/");
-      const auto folderName = dataInfo.name.substr(0, splitPos);
       m_ProgramArguments.push_back(targetArgument);
       m_ProgramArguments.push_back("/" + Replace((dirPathContainer / folderName).string(),'\\', '/'));
 
@@ -318,27 +402,18 @@ void mitk::DockerHelper::GenerateSaveDataInfoAndSaveData(){
       }
       else
       {
-        // Actual this dir is never used on the host system, but the name is
-        // involved on in the container as mounting point
-        const auto phantomDirPathHost = boost::filesystem::path(mitk::HelperUtils::TempDirPath());
-        // Extract the directory name
-        const auto dirPathContainer = phantomDirPathHost.filename();
-        // so delete it on the host again
-        boost::filesystem::remove(phantomDirPathHost);
-        
         auto fp = boost::filesystem::canonical(boost::filesystem::path(filePath));
         MITK_INFO << fp;
         // find the files location (parent dir) on the host system
         auto dirPathHost = fp;
         dirPathHost.remove_filename();  
 
-        // mount this parent dir as read only into the container
-        m_DockerArguments.push_back("-v");
-        m_DockerArguments.push_back(dirPathHost.string() + ":/" + Replace(dirPathContainer.string(), '\\', '/') + ":ro");
+        // mount this parent dir as read only into the container (reuse if already mapped)
+        const auto dirPathContainer = AddOrReuseVolumeMapping(dirPathHost.string(), true);
 
         auto fileName = fp.filename();
 
-        const auto filePathContainer = dirPathContainer / fileName.replace_extension(dataInfo.extension);
+        const auto filePathContainer = boost::filesystem::path(dirPathContainer) / fileName.replace_extension(dataInfo.extension);
         m_ProgramArguments.push_back(targetArgument);
         m_ProgramArguments.push_back("/" + Replace(filePathContainer.string(),'\\','/'));
       }
