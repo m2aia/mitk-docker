@@ -101,7 +101,7 @@ void QmitkTotalSegmentatorView::OnStartTotalSegmentator()
   auto results = helper.GetResults();
   if (m_Controls.cbMultiLabel->isChecked())
   {
-    auto lsImage = mitk::LabelSetImage::New();
+    auto lsImage = mitk::MultiLabelSegmentation::New();
     lsImage->InitializeByLabeledImage(
         dynamic_cast<mitk::Image *>(results[0].GetPointer()));
     auto node = mitk::DataNode::New();
