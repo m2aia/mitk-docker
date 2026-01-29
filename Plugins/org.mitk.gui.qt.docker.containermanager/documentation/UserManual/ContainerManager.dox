@@ -1,0 +1,228 @@
+/**
+\page org_mitk_views_docker_containermanager Container Manager
+
+\imageMacro{docker-icon.svg,"Icon of the Container Manager",2.00}
+
+\tableofcontents
+
+\section org_mitk_views_docker_containermanager_intro Introduction
+
+The Container Manager plugin provides a comprehensive user interface to manage Docker container images for M2aia.
+It enables you to organize, configure, and deploy Docker-based computational tools and workflows.
+
+\subsection org_mitk_views_docker_containermanager_intro_features Key Features
+
+- Add and manage multiple Docker image URLs
+- Automatically query and display available image tags/versions
+- Pull specific versions of Docker images
+- Track which images are locally available vs. need downloading
+- Persist image configurations across sessions using JSON storage
+- Import/export image collections as JSON files
+- Add metadata (repository links, notes) for each image
+- Fetch and display container help text
+- Monitor Docker status and operations in real-time
+- Context menu operations for advanced image management
+
+\section org_mitk_views_docker_containermanager_usage Usage
+
+\subsection org_mitk_views_docker_containermanager_usage_add Adding Images
+
+1. Enter a Docker image URL in the "Add Docker Image" field (e.g., \c ghcr.io/m2aia/umap)
+2. Click "Add Image" to add it to your managed images list
+3. The image will appear in the Managed Images table with automatically detected tags
+
+Supported image sources include:
+- GitHub Container Registry (ghcr.io)
+- Docker Hub
+- Private registries (if accessible)
+
+\subsection org_mitk_views_docker_containermanager_usage_manage Managing Images
+
+The Managed Images table displays all your configured images with the following columns:
+- <b>Image Name</b>: The full Docker image identifier
+- <b>Available Tags</b>: A dropdown showing all available versions/tags from the registry
+- <b>Local Tag</b>: The currently selected tag (editable by double-clicking)
+- <b>Status</b>: Indicates whether the image:tag combination is locally available
+- <b>Actions</b>: Pull and Remove buttons for each image
+
+\subsubsection org_mitk_views_docker_containermanager_usage_manage_table Table Operations
+
+- <b>Select a tag</b>: Use the tag dropdown to choose which version to work with
+- <b>Edit local tag</b>: Double-click the Local Tag cell to manually enter a specific tag
+- <b>View status</b>: Check the Status column to see if an image is available locally
+- <b>Select an image</b>: Click a row to view and edit its details in the Image Details panel
+
+\subsubsection org_mitk_views_docker_containermanager_usage_manage_context Context Menu
+
+Right-click on any image in the table to access additional operations:
+- Copy image name to clipboard
+- Copy full image reference (name:tag) to clipboard
+- Remove the image from the list
+
+\subsection org_mitk_views_docker_containermanager_usage_pull Pulling Images
+
+1. Select the desired tag from the "Available Tags" dropdown
+2. Click the "Pull" button next to the image
+3. Monitor progress in the Output panel at the bottom
+4. The Status column will update to "Available" once the pull completes successfully
+
+The plugin intelligently disables the Pull button for images that are already available locally with the selected tag.
+
+\subsection org_mitk_views_docker_containermanager_usage_details Image Details Panel
+
+When an image is selected in the table, the Image Details panel shows:
+
+- <b>Repository</b>: URL to the source code repository (e.g., GitHub link)
+  - Editable field with context menu to open in browser
+  - The plugin attempts to auto-suggest repository URLs based on image names
+  - Right-click for "Open in Browser" option
+  
+- <b>Notes</b>: Free-form text field for custom annotations about the image
+  - Purpose, usage instructions, version notes, etc.
+  - Automatically saved when editing finishes
+
+All metadata is persisted and reloaded when you reopen the plugin.
+
+\subsection org_mitk_views_docker_containermanager_usage_help Container Help
+
+The Container Help section (collapsible) allows you to fetch documentation from the container itself:
+
+1. Expand the "Container Help" group box
+2. Click "Fetch Help" to run the container with the \c --help flag
+3. The help text will be displayed in the text area
+4. This is useful for discovering container command-line options and usage
+
+\subsection org_mitk_views_docker_containermanager_usage_persistence Persistence and Import/Export
+
+\subsubsection org_mitk_views_docker_containermanager_usage_persistence_auto Automatic Persistence
+
+All configured images, their selected tags, repository links, and notes are automatically saved to MITK preferences.
+They will be restored the next time you open the plugin.
+
+\subsubsection org_mitk_views_docker_containermanager_usage_persistence_json JSON Import/Export
+
+<b>Save JSON</b>: Export your current image collection to a JSON file
+- Useful for sharing configurations with colleagues
+- Backup your image configurations
+- Version control your container dependencies
+
+<b>Load JSON</b>: Import an image collection from a JSON file
+- Merges with existing images (doesn't replace)
+- Loads all tags, metadata, and notes
+
+<b>Reload</b>: Reload images from preferences
+- Discards unsaved changes
+- Useful if you've made mistakes and want to revert
+
+The JSON format is human-readable and can be manually edited if needed.
+
+\subsection org_mitk_views_docker_containermanager_usage_status Docker Status Monitoring
+
+The plugin continuously monitors Docker availability:
+- <b>Docker Status</b> indicator at the top shows current Docker daemon state
+- If Docker becomes unavailable, controls are automatically disabled
+- Helpful error messages guide you to resolve Docker connection issues
+
+\subsection org_mitk_views_docker_containermanager_usage_output Output Panel
+
+The Output panel at the bottom displays:
+- Real-time Docker command output
+- Progress information during image pulls
+- Error messages and diagnostics
+- Tag query results
+- Help text fetch operations
+
+Output is automatically timestamped and can be used for troubleshooting.
+
+\section org_mitk_views_docker_containermanager_workflows Common Workflows
+
+\subsection org_mitk_views_docker_containermanager_workflows_newimage Adding a New Image
+
+1. Enter the image URL (e.g., \c ghcr.io/m2aia/umap)
+2. Click "Add Image"
+3. Wait for tags to be automatically queried
+4. Select desired tag from dropdown
+5. Click "Pull" to download
+6. Optionally add repository URL and notes
+
+\subsection org_mitk_views_docker_containermanager_workflows_share Sharing Image Collections
+
+1. Configure all your images with appropriate tags and notes
+2. Click "Save JSON"
+3. Choose a filename and location
+4. Share the JSON file with colleagues
+5. They can click "Load JSON" to import your collection
+
+\subsection org_mitk_views_docker_containermanager_workflows_update Updating to Newer Versions
+
+1. Select an image in the table
+2. Choose a newer tag from the "Available Tags" dropdown
+3. Click "Pull" to download the new version
+4. The local tag is automatically updated
+
+\section org_mitk_views_docker_containermanager_requirements Requirements
+
+<b>System Requirements:</b>
+- Docker must be installed and running on your system
+- Docker daemon must be accessible (usually requires Docker service to be started)
+- Network connectivity to access Docker registries
+- Sufficient disk space for Docker images
+
+<b>Permissions:</b>
+- User must have permissions to run Docker commands
+- On Linux, user typically needs to be in the 'docker' group
+
+<b>Network:</b>
+- Internet access for pulling images from public registries
+- VPN or proxy configuration if required by your network
+
+\section org_mitk_views_docker_containermanager_troubleshooting Troubleshooting
+
+\subsection org_mitk_views_docker_containermanager_troubleshooting_docker Docker Not Available
+
+If you see "Docker Status: Not Available":
+- Verify Docker is installed: Run \c docker --version in terminal
+- Check Docker service is running: \c sudo systemctl status docker (Linux)
+- Ensure you have permissions: Add your user to docker group
+- Restart the plugin after starting Docker
+
+\subsection org_mitk_views_docker_containermanager_troubleshooting_tags Tags Not Loading
+
+If tags don't appear after adding an image:
+- Check the Output panel for error messages
+- Verify the image name is correct
+- Ensure you have network connectivity
+- Some registries may require authentication
+
+\subsection org_mitk_views_docker_containermanager_troubleshooting_pull Pull Failures
+
+If image pull fails:
+- Check available disk space
+- Verify network connectivity
+- Check the Output panel for specific error messages
+- Ensure you have access to the registry (may require docker login)
+
+\section org_mitk_views_docker_containermanager_technical Technical Details
+
+\subsection org_mitk_views_docker_containermanager_technical_storage Storage Location
+
+Images and metadata are stored in MITK preferences under:
+- <b>Preference node</b>: \c org.mitk.views.docker.containermanager
+- <b>Preference key</b>: \c docker.container.manager.images
+- <b>Format</b>: JSON array of image objects
+
+\subsection org_mitk_views_docker_containermanager_technical_json JSON Schema
+
+The exported/imported JSON format:
+\code{.json}
+[
+  {
+    "imageName": "ghcr.io/m2aia/umap",
+    "tag": "latest",
+    "repository": "https://github.com/m2aia/umap",
+    "notes": "UMAP dimensionality reduction container"
+  }
+]
+\endcode
+
+*/

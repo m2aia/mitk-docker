@@ -1,0 +1,5 @@
+set(Plugin-Name "Container Manager")
+set(Plugin-Version "1.0.0")
+set(Plugin-Vendor "M2aia")
+set(Plugin-ContactAddress "")
+set(Require-Plugin org.mitk.gui.qt.common)
