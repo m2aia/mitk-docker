@@ -1,5 +1,6 @@
 set(CPP_FILES
   mitkDockerHelper.cpp
+  mitkDockerImageManager.cpp
 )
 
 # set(UI_FILES

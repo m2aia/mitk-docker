@@ -3,7 +3,7 @@ set(boost_depends "Boost|filesystem")
 
 mitk_create_module(
   DEPENDS PUBLIC MitkCore
-  PACKAGE_DEPENDS PUBLIC Poco ${boost_depends}
+  PACKAGE_DEPENDS PUBLIC Poco ${boost_depends} nlohmann_json
 )
 
 # add_subdirectory(cmdapps)
